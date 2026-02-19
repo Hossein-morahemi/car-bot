@@ -87,7 +87,7 @@ async function sendAllPrices() {
 }
 
 // هر 5 دقیقه
-cron.schedule("*/5 * * * *", () => {
+cron.schedule("*/1 * * * *", () => {
   sendAllPrices();
 });
 
