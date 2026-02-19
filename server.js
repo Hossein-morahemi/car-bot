@@ -43,7 +43,7 @@ async function scrapeAndSend() {
 }
 
 // هر 10 دقیقه اجرا میشه
-cron.schedule("*/10 * * * *", () => {
+cron.schedule("*/5 * * * *", () => {
   scrapeAndSend();
 });
 
