@@ -1,57 +1,57 @@
-import fetch from "node-fetch";
+const express = require("express");
+const axios = require("axios");
+const cheerio = require("cheerio");
+const cron = require("node-cron");
+
+const app = express();
 
 const BOT_TOKEN = "8028245113:AAErirbIUd3crpBid1QtATC8LXeii1Ko7Mw";
 const CHANNEL_ID = "@gheymat_khodroo";
 
-async function sendToTelegram(messages) {
-  const tgApiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-  await fetch(tgApiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHANNEL_ID, text: messages.join("\n") }),
-  });
-}
 
-async function handleRequest(env) {
-  const messages = [];
+async function scrapeAndSend() {
   try {
-    const cars = [
-      { name: "ساینا", price: 929000000 },
-      { name: "سورن(XU7P)", price: 1287000000 },
-      { name: "شاهین دنده", price: 1523000000 },
-    ];
+    const { data } = await axios.get("https://t.me/s/saipanewpage");
 
-    for (const car of cars) {
-      const lastPriceStr = await env.CAR_KV.get(car.name);
-      const lastPrice = lastPriceStr ? parseFloat(lastPriceStr) : null;
+    const $ = cheerio.load(data);
+    const messages = $(".tgme_widget_message_text");
 
-      let trend = "";
-      if (lastPrice !== null) {
-        trend = car.price > lastPrice ? "🟢" :
-                car.price < lastPrice ? "🔴" : "⚪️";
-      }
+    const lastMessage = messages.last().html();
+    if (!lastMessage) return;
 
-      await env.CAR_KV.put(car.name, car.price.toString());
+    const text = lastMessage
+      .replace(/<br\s*\/?>/g, "\n")
+      .replace(/<[^>]+>/g, "");
 
-      const formattedPrice = new Intl.NumberFormat("en-US").format(car.price);
-      messages.push(`${trend} ${car.name}: ${formattedPrice} تومان`);
-    }
+    const lines = text.split("\n").filter(l => l.includes("⬅️"));
 
-    if (messages.length > 0) {
-      await sendToTelegram(messages);
-    }
+    let finalMessage = "📊 لیست قیمت خودرو\n\n";
+
+    lines.forEach(line => {
+      finalMessage += "🚗 " + line.trim() + "\n";
+    });
+
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: CHANNEL_ID,
+      text: finalMessage
+    });
+
+    console.log("ارسال شد ✅");
   } catch (err) {
-    console.error("خطا:", err);
-    await sendToTelegram(["⚠️ خطا در ارسال پیام"]);
+    console.log("خطا:", err.message);
   }
 }
 
-export default {
-  async fetch(request, env, ctx) {
-    await handleRequest(env);
-    return new Response("Bot executed");
-  },
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(handleRequest(env));
-  }
-};
+// هر 10 دقیقه اجرا میشه
+cron.schedule("*/10 * * * *", () => {
+  scrapeAndSend();
+});
+
+app.get("/", (req, res) => {
+  res.send("Bot is running...");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server started...");
+});
